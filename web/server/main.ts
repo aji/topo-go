@@ -17,7 +17,6 @@ function requestLogger() {
         logger.info(
             {
                 path,
-                status: res.statusCode,
                 elapsedMs: timer(),
             },
             'request'
