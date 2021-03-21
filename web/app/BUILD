@@ -9,6 +9,7 @@ ts_library(
     ]),
     module_name = "topo-go/web/app",
     deps = [
+        "//game",
         "@npm//@types",
         "@npm//express",
         "@npm//pino",
