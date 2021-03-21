@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+  <title>
+    <% if (title !== null) { %>
+      <%= title %> -
+    <% } %>
+    Topo Go
+  </title>
+  <script type="text/javascript" src="/content/main.js"></script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <%- include(view, options) %>
+
+  <div class='footer'>
+    Check it out on <a href="https://github.com/aji/topo-go">GitHub</a>
+  </div>
+</body>
+
+</html>

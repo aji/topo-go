@@ -1,0 +1,14 @@
+<div class="header">
+  <div><%= table.name %> Table</div>
+  <div><a href="/">&larr; Back to index</a></div>
+</div>
+
+<div class="content">
+  <div id="game"></div>
+  <script>
+    startGame(
+      <%- JSON.stringify(table) %>,
+      document.getElementById('game')
+    );
+  </script>
+</div>

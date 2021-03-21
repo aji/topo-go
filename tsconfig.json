@@ -5,7 +5,8 @@
         "module": "commonjs",
         "strict": true,
         "baseUrl": ".",
-        "lib": ["dom", "es6"],
+        "downlevelIteration": true,
+        "lib": ["dom", "es6", "es2015"],
         "paths": {
             "topo-go/*": ["*"]
         }

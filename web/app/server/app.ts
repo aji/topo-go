@@ -25,7 +25,7 @@ function requestLogger() {
 export function createApp(cf: Config): Application {
     const app = express();
 
-    app.set('view engine', 'pug');
+    app.set('view engine', 'ejs');
     app.use('/', requestLogger());
 
     app.use('/', createPageRouter(cf));

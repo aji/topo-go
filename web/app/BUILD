@@ -11,9 +11,9 @@ ts_library(
     deps = [
         "//game",
         "@npm//@types",
+        "@npm//ejs",
         "@npm//express",
         "@npm//pino",
-        "@npm//pug",
     ],
 )
 

@@ -3,9 +3,16 @@ import { Game, Manifold, Board, XY } from '../../game/board';
 export type TableID = string;
 export type TableList = Map<TableID, Table>;
 
+export interface Player {
+    token: string;
+    name: string;
+}
+
 export class Table {
     id: TableID;
     name: string;
+
+    players: Array<Player> = [];
     game: null | Game<XY>;
 
     constructor(id: TableID, name: string) {

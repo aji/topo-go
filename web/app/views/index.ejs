@@ -1,0 +1,24 @@
+<div class="header">
+  Welcome to TOPO GO
+</div>
+
+<div class="content">
+  <p>Tables:</p>
+  <table class="tabularize">
+    <% tables.forEach((table)=> { %>
+    <tr>
+      <td><b><a href="/tables/<%= table.id %>"><%= table.name %></a></b></td>
+      <td>
+      <% if (table.players.length===0) { %>
+        OPEN
+      <% } else { %>
+        <%= table.players.map(p => p.name).join(', ') %>
+        <% if (table.game !==null) { %>
+          playing <%= table.game.name || `${table.game.manifold.name} ${table.game.size}` %>
+        <% } %>
+      <% } %>
+      </td>
+    </tr>
+    <% }); %>
+  </table>
+</div>
