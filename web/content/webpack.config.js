@@ -1,5 +1,11 @@
-module.exports = {
-    mode: 'production',
+module.exports = (env, argv) => ({
+    mode: argv.mode,
+    output: {
+        libraryTarget: 'umd',
+    },
+    resolve: {
+        extensions: ['.ts', '.js'],
+    },
     module: {
         rules: [
             {
@@ -9,4 +15,4 @@ module.exports = {
             },
         ],
     },
-};
+});

@@ -2,13 +2,16 @@
     "compilerOptions": {
         "esModuleInterop": true,
         "skipLibCheck": true,
+        "moduleResolution": "node",
         "module": "commonjs",
+        "target": "es5",
         "strict": true,
-        "baseUrl": ".",
+        "baseUrl": "topo-go",
         "downlevelIteration": true,
+        "preserveConstEnums": true,
         "lib": ["dom", "es6", "es2015"],
         "paths": {
-            "topo-go/*": ["./*"]
+            "topo-go/*": ["*"]
         }
     }
 }

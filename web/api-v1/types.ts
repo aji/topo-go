@@ -1,3 +1,9 @@
+export interface ErrorBody {
+    message: string;
+}
+
+export interface TableSearchOptions {}
+
 export interface TableSummary {
     id: string;
     name: string;

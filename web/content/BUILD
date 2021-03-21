@@ -1,7 +1,5 @@
 load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
 
-_SOURCES = glob(["*.ts"])
-
 webpack(
     name = "dist",
     args = [
@@ -10,12 +8,14 @@ webpack(
         "$(execpath webpack.config.js)",
         "-o",
         "$(@D)",
+        "--mode",
+        "production",
     ],
-    data = _SOURCES + [
+    data = glob(["*.ts"]) + [
         "webpack.config.js",
-        "//web/api",
         "//:tsconfig.json",
-        "@npm//ts-loader",
+        "//web/api-v1:sources",
+        "@npm//:node_modules",
     ],
     output_dir = True,
     visibility = ["//visibility:public"],
