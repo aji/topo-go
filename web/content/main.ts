@@ -1,6 +1,7 @@
-(window as any).startGame = function (init: any, game: Element) {
-    alert(JSON.stringify(init));
-    console.log({ init, game });
-};
+import { TableDetail } from 'topo-go/web/api/types';
 
-console.log('hello, world');
+(window as any).startGame = function (init: TableDetail, game: Element) {
+    const content = document.createElement('div');
+    content.innerText = `Table`;
+    game.appendChild(content);
+};

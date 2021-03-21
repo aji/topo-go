@@ -13,8 +13,9 @@ webpack(
     ],
     data = _SOURCES + [
         "webpack.config.js",
+        "//web/api",
         "//:tsconfig.json",
-        "@npm//:node_modules",
+        "@npm//ts-loader",
     ],
     output_dir = True,
     visibility = ["//visibility:public"],

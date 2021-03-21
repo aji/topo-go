@@ -8,7 +8,7 @@
         "downlevelIteration": true,
         "lib": ["dom", "es6", "es2015"],
         "paths": {
-            "topo-go/*": ["*"]
+            "topo-go/*": ["./*"]
         }
     }
 }
