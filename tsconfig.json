@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "esModuleInterop": true,
+        "module": "commonjs",
+        "strict": true,
+        "baseUrl": ".",
+        "lib": ["dom", "es6"],
+        "paths": {
+            "topo-go/*": ["*"]
+        }
+    }
+}

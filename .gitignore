@@ -1,0 +1,7 @@
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-topo-go
+node_modules
+*~
+*.swp
