@@ -2,6 +2,14 @@ import { TableDetail } from '../api-v1/types';
 import { Routes } from '../api-v1/routes';
 import createClient from '../api-v1/client';
 
+import {
+    elementOpen,
+    elementClose,
+    elementVoid,
+    text,
+    patch as patchIncrementalDom,
+} from 'incremental-dom';
+
 const { GET, POST, DELETE } = createClient(window.fetch);
 
 const T = (s: string): Node => document.createTextNode(s);
@@ -29,6 +37,56 @@ const $button = (onClick: (e: Event) => void, ...xs: Node[]) =>
 const $tabularize = (...xs: Node[]): Element =>
     A($table(...xs), { class: 'tabularize' });
 const $tr = (...xs: Node[]): Element => E('tr')(...xs.map((e) => E('td')(e)));
+
+function render() {
+    function newGame(manifold: string, size: string) {
+        return (e: Event) => {
+            confirm(`Start ${size} ${manifold} game?`);
+        };
+    }
+
+    function row(manifold: string, name: string) {
+        elementOpen('tr');
+
+        elementOpen('td');
+        elementOpen('b');
+        text(name);
+        elementClose('b');
+        elementClose('td');
+
+        for (const size of ['9x9', '13x13', '19x19']) {
+            elementOpen('td');
+            elementOpen(
+                'button',
+                null,
+                null,
+                'onClick',
+                newGame(manifold, size)
+            );
+            text(size);
+            elementClose('button');
+            elementClose('td');
+        }
+
+        elementClose('tr');
+    }
+
+    elementOpen('div');
+    text('Start a game at this table:');
+    elementOpen('table', null, null, 'class', 'tabularize');
+    for (const [manifold, name] of [
+        ['normal', 'Normal'],
+        ['cylinder', 'Cylinder'],
+        ['mobius', 'Mobius strip'],
+        ['torus', 'Torus'],
+        ['klein', 'Klein bottle'],
+        ['projective', 'Projective plane'],
+    ]) {
+        row(manifold, name);
+    }
+    elementClose('table');
+    elementClose('div');
+}
 
 const newGameMenu = (): Node => {
     function newGame(manifold: string, size: string) {
@@ -59,5 +117,8 @@ const newGameMenu = (): Node => {
 };
 
 (window as any).startGame = (init: TableDetail, game: Element): void => {
-    game.appendChild(newGameMenu());
+    function update() {
+        patchIncrementalDom(game, () => render());
+    }
+    update();
 };
