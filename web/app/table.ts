@@ -45,15 +45,16 @@ export function tableListFromNames(names: Array<string>): TableList {
 
 export const newDefaultTableList = () =>
     tableListFromNames([
-        'Sun',
-        'Moon',
-        'Earth',
-        'Mercury',
-        'Venus',
-        'Mars',
-        'Jupiter',
-        'Saturn',
-        'Uranus',
-        'Neptune',
-        'Pluto',
+        'Aries',
+        'Taurus',
+        'Gemini',
+        'Cancer',
+        'Leo',
+        'Virgo',
+        'Libra',
+        'Scorpio',
+        'Saggitarius',
+        'Capricorn',
+        'Aquarius',
+        'Pisces',
     ]);
