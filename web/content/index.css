@@ -1,0 +1,23 @@
+.game-tile {
+    background: url(game-tiles.png);
+    display: block;
+    width: 40px;
+    height: 40px;
+}
+
+.game-grid {
+    border-collapse: collapse;
+}
+
+.game-tile,
+.game-grid,
+.game-grid tr,
+.game-grid td {
+    margin: 0;
+    border: 0;
+    padding: 0;
+}
+
+.game-grid {
+    background-color: rgb(175, 130, 71);
+}

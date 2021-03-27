@@ -1,5 +1,4 @@
-import { TableDetail } from '../api-v1/types';
-import createClient from '../api-v1/client';
+/// <reference path="_imports.d.ts" />
 
 import {
     elementOpen,
@@ -7,6 +6,11 @@ import {
     text,
     patch as patchIncrementalDom,
 } from 'incremental-dom';
+
+import { TableDetail } from '../api-v1/types';
+import createClient from '../api-v1/client';
+
+import './index.css';
 
 const { GET, POST, DELETE } = createClient(window.fetch);
 
@@ -22,7 +26,7 @@ type State =
 type Dispatch = (action: Action) => void;
 
 function initialState(): State {
-    return { at: 'start' };
+    return { at: 'playing', manifold: { ty: 'a', name: 'b', size: '9x9' } };
 }
 
 function reduce(state: State, action: Action): State {
@@ -39,9 +43,16 @@ function reduce(state: State, action: Action): State {
 
 type RF = () => void;
 
+const flatten = (obj: { [key: string]: any }): any[] =>
+    ([] as any[]).concat.apply([], Object.entries(obj));
+
 const T = (s: string): RF => () => text(s);
-const E = (s: string, ...args: any[]) => (...children: RF[]): RF => () => (
-    elementOpen(s, ...args), children.forEach((f) => f()), elementClose(s)
+const E = (s: string, opts: { [key: string]: any } = {}) => (
+    ...children: RF[]
+): RF => () => (
+    elementOpen(s, null, null, ...flatten(opts)),
+    children.forEach((f) => f()),
+    elementClose(s)
 );
 
 const $_ = E('div');
@@ -49,11 +60,86 @@ const $b = E('b');
 const $tr = E('tr');
 const $td = E('td');
 
-const tabularize = E('table', null, null, 'class', 'tabularize');
-const button = (hdlr: (e: Event) => void) =>
-    E('button', null, null, 'onclick', hdlr, 'class', 'cls');
+const tabularize = E('table', { class: 'tabularize' });
+const button = (hdlr: (e: Event) => void) => E('button', { onclick: hdlr });
 
 const row = (...children: RF[]) => $tr(...children.map((c) => $td(c)));
+
+const tile = (r: number, c: number): RF => {
+    return E('div', {
+        class: 'game-tile',
+        style: `background-position: -${c * 40}px -${r * 40}px`,
+    })();
+};
+
+enum TileType {
+    empty,
+    black,
+    white,
+}
+
+const tileOf = (type: TileType, r: number, c: number): RF => {
+    switch (type) {
+        case TileType.empty:
+            return tile(
+                r == 0 ? 0 : r == 8 ? 2 : 1,
+                c == 0 ? 0 : c == 8 ? 2 : 1
+            );
+        case TileType.black:
+            return tile(0, 3);
+        case TileType.white:
+            return tile(1, 3);
+    }
+};
+
+const boardInit = `
+. . . . . . . . .
+. . . . . . . . .
+. . . . . . . . .
+. . W B . . . . .
+. . B W . B . . .
+. . B W W B . . .
+. . . . B . . . .
+. . . . . . . . .
+. . . . . . . . .
+`;
+
+const boardData: TileType[][] = (() => {
+    const res: TileType[][] = [];
+    const chars = boardInit
+        .split(/[\n ]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    console.log(chars.length);
+    console.log(chars.join(''));
+    for (let r = 0; r < 9; r++) {
+        res.push([]);
+        for (let c = 0; c < 9; c++) {
+            switch (chars.shift()) {
+                case '.':
+                    res[r].push(TileType.empty);
+                    break;
+                case 'B':
+                    res[r].push(TileType.black);
+                    break;
+                case 'W':
+                    res[r].push(TileType.white);
+                    break;
+            }
+        }
+    }
+    console.log(res);
+    return res;
+})();
+
+const board = (): RF => {
+    const idxs = Array.from(new Array(9).keys());
+    return E('table', { class: 'game-grid' })(
+        ...idxs.map((r) =>
+            $tr(...idxs.map((c) => $td(tileOf(boardData[r][c], r, c))))
+        )
+    );
+};
 
 const render = (state: State, dispatch: Dispatch): RF => {
     switch (state.at) {
@@ -97,11 +183,7 @@ const render = (state: State, dispatch: Dispatch): RF => {
 
         case 'playing':
             return $_(
-                $b(
-                    T(
-                        `${state.manifold.name} ${state.manifold.size} in progress...`
-                    )
-                ),
+                board(),
                 button((e) => dispatch({ ty: 'backToStart' }))(
                     T('Back to start')
                 )

@@ -1,5 +1,6 @@
 load("@npm//@bazel/esbuild:index.bzl", "esbuild")
 load("@npm//@bazel/typescript:index.bzl", "ts_project")
+load("@build_bazel_rules_nodejs//:index.bzl", "copy_to_bin")
 
 ts_project(
     name = "content",
@@ -15,16 +16,24 @@ ts_project(
     ],
 )
 
+copy_to_bin(
+    name = "data",
+    srcs = [
+        "game-tiles.png",
+        "index.css",
+    ],
+)
+
 esbuild(
     name = "dist",
     args = [
         "--sourcemap",
+        "--loader:.png=file",
         "--asset-names=asset/[name]-[hash]",
         "--chunk-names=chunk/[name]-[hash]",
-        "--public-path=/",
+        "--public-path=/content",
     ],
     entry_point = "index.ts",
-    minify = True,
     output_dir = True,
     tool = select({
         "@bazel_tools//src/conditions:darwin": "@esbuild_darwin//:bin/esbuild",
@@ -32,5 +41,8 @@ esbuild(
         "@bazel_tools//src/conditions:linux_x86_64": "@esbuild_linux//:bin/esbuild",
     }),
     visibility = ["//visibility:public"],
-    deps = [":content"],
+    deps = [
+        ":content",
+        ":data",
+    ],
 )
