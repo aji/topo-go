@@ -1,0 +1,8 @@
+{
+    "compilerOptions": {
+        "lib": ["es6", "dom"],
+        "target": "es6"
+    },
+    "references": [{ "path": "../api-v1" }],
+    "extends": "../../tsconfig.json"
+}

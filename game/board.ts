@@ -1,5 +1,3 @@
-import { narrowTsOptions } from '@bazel/typescript';
-
 export enum Tile {
     empty = 0,
     black = 1,

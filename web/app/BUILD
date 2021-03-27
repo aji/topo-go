@@ -1,13 +1,13 @@
-load("@npm//@bazel/typescript:index.bzl", "ts_library")
+load("@npm//@bazel/typescript:index.bzl", "ts_project")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 
-ts_library(
-    name = "app_compile",
-    srcs = glob([
-        "*.ts",
-        "server/**/*.ts",
-    ]),
-    module_name = "topo-go/web/app",
+ts_project(
+    name = "compile",
+    srcs = glob(["**/*.ts"]),
+    declaration = True,
+    extends = "@topo-go//:tsconfig.json",
+    tsconfig = "tsconfig.json",
+    visibility = ["//visibility:public"],
     deps = [
         "//game",
         "//web/api-v1",
@@ -21,11 +21,11 @@ ts_library(
 nodejs_binary(
     name = "app",
     data = [
-        ":app_compile",
+        ":compile",
         "//web/content:dist",
     ] + glob([
         "views/*",
         "static/*",
     ]),
-    entry_point = "main.ts",
+    entry_point = "index.ts",
 )

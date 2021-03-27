@@ -1,0 +1,7 @@
+{
+    "compilerOptions": {
+        "composite": true,
+        "lib": ["es6", "dom"]
+    },
+    "extends": "../../tsconfig.json"
+}

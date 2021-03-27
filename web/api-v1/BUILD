@@ -1,14 +1,11 @@
-load("@npm//@bazel/typescript:index.bzl", "ts_library")
+load("@npm//@bazel/typescript:index.bzl", "ts_project")
 
-filegroup(
-    name = "sources",
-    srcs = glob(["*.ts"]),
-    visibility = ["//visibility:public"],
-)
-
-ts_library(
+ts_project(
     name = "api-v1",
-    srcs = ["sources"],
-    module_name = "topo-go/web/api-v1",
+    srcs = glob(["*.ts"]),
+    composite = True,
+    declaration = True,
+    extends = "@topo-go//:tsconfig.json",
+    tsconfig = "tsconfig.json",
     visibility = ["//visibility:public"],
 )
