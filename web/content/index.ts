@@ -191,7 +191,16 @@ const render = (state: State, dispatch: Dispatch): RF => {
     }
 };
 
-(window as any).startGame = (init: TableDetail, game: Element): void => {
+(window as any).startGame = (init: TableDetail, root: Element): void => {
+    const canvas = document.createElement('canvas');
+    const page = document.createElement('div');
+
+    canvas.setAttribute('width', '400');
+    canvas.setAttribute('height', '400');
+
+    root.appendChild(canvas);
+    root.appendChild(page);
+
     const s = { state: initialState(), pending: false };
     function update() {
         s.pending = false;
@@ -202,7 +211,8 @@ const render = (state: State, dispatch: Dispatch): RF => {
                 setTimeout(update, 0);
             }
         }
-        patchIncrementalDom(game, render(s.state, dispatch));
+        patchIncrementalDom(page, render(s.state, dispatch));
     }
+
     update();
 };
