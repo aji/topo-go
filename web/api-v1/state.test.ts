@@ -83,28 +83,33 @@ const codecTests = <T, E>(
 };
 
 const someTileArray = [0, 1, 2, 0, 0, 0, 0, 2, 1, 2, 1, 2, 1, 2, 2, 0, 0, 0];
-const someMove = { board: someTileArray };
-const someTableAttrs: S.TableAttrs = { manifold: 'normal/19x19' };
+const someMove = {
+    board: new S.Board(new S.Manifold('normal/19x19'), someTileArray),
+};
+const someTableAttrs: S.TableAttrs = { manifold: mobius9x9m };
 const someTable = { attrs: someTableAttrs, moves: [someMove] };
 
 const someTileArrayEncoded = '.XO....OXOXOXOO...';
-const someMoveEncoded = { b: someTileArrayEncoded };
-const someTableEncoded = { a: someTableAttrs, m: [someMoveEncoded] };
+const someMoveEncoded = {
+    b: { m: 'normal/19x19' as S.ManifoldID, t: someTileArrayEncoded },
+};
+const someTableAttrsEncoded = { m: 'mobius/9x9' as S.ManifoldID };
+const someTableEncoded = { a: someTableAttrsEncoded, m: [someMoveEncoded] };
 
 describe(
     'tileArrayCodec',
     codecTests(S.tileArrayCodec, someTileArray, someTileArrayEncoded)
 );
 describe('moveCodec', codecTests(S.moveCodec, someMove, someMoveEncoded));
+describe(
+    'tableAttrsCodec',
+    codecTests(S.tableAttrsCodec, someTableAttrs, someTableAttrsEncoded)
+);
 describe('tableCodec', codecTests(S.tableCodec, someTable, someTableEncoded));
 
 describe(
     'tableTransitionCodec (reset)',
-    codecTests(
-        S.tableTransitionCodec,
-        { t: 'reset', v: someTableAttrs },
-        { t: 'r', v: someTableAttrs }
-    )
+    codecTests(S.tableTransitionCodec, { t: 'reset', v: {} }, { t: 'r', v: {} })
 );
 
 describe(
@@ -127,10 +132,10 @@ describe('tableApply', () => {
     it('applies reset correctly', () => {
         const nextTable = apply({
             t: 'reset',
-            v: { manifold: 'mobius/13x13' },
+            v: { manifold: new S.Manifold('mobius/13x13') },
         });
         expect(nextTable).toStrictEqual({
-            attrs: { manifold: 'mobius/13x13' },
+            attrs: { manifold: new S.Manifold('mobius/13x13') },
             moves: [],
         });
     });
@@ -147,7 +152,7 @@ describe('tableApply', () => {
     });
 
     it('applies moves correctly', () => {
-        const aMove = { board: [2, 1, 1, 2, 1] };
+        const aMove = { board: new S.Board(normal9x9m, [2, 1, 1, 2, 1]) };
         expect(apply({ t: 'moves', v: [aMove, aMove] })).toStrictEqual({
             attrs: someTable.attrs,
             moves: [someMove, aMove, aMove],
@@ -201,9 +206,9 @@ describe('tableActionToBatch', () => {
         S.tableActionToBatch(someTable, ta);
 
     it('converts reset correctly', () => {
-        const attrs: S.TableAttrs = { manifold: 'klein/19x19' };
+        const attrs: S.TableAttrs = { manifold: new S.Manifold('klein/19x19') };
         expect(convert({ t: 'reset', v: attrs })).toStrictEqual([
-            { t: 'reset', v: { manifold: 'klein/19x19' } },
+            { t: 'reset', v: { manifold: new S.Manifold('klein/19x19') } },
         ]);
     });
 

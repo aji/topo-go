@@ -148,7 +148,41 @@ export class Manifold {
 
         return { r, c };
     }
+
+    adj({ r, c }: RC): RC[] {
+        return [
+            this.canonicalize({ r, c: c + 1 }),
+            this.canonicalize({ r, c: c - 1 }),
+            this.canonicalize({ r: r + 1, c }),
+            this.canonicalize({ r: r - 1, c }),
+        ].filter((c): c is RC => c !== null);
+    }
 }
+
+export const ALL_MANIFOLD_IDS: ManifoldID[] = [
+    'normal/9x9',
+    'normal/13x13',
+    'normal/19x19',
+    'cylinder/9x9',
+    'cylinder/13x13',
+    'cylinder/19x19',
+    'mobius/9x9',
+    'mobius/13x13',
+    'mobius/19x19',
+    'torus/9x9',
+    'torus/13x13',
+    'torus/19x19',
+    'klein/9x9',
+    'klein/13x13',
+    'klein/19x19',
+    'projective/9x9',
+    'projective/13x13',
+    'projective/19x19',
+];
+
+export const ALL_MANIFOLDS: Manifold[] = ALL_MANIFOLD_IDS.map(
+    (m) => new Manifold(m)
+);
 
 //
 //
@@ -162,6 +196,18 @@ export enum Tile {
     white = 2,
 }
 
+export type Captures = {
+    [Tile.empty]: number;
+    [Tile.black]: number;
+    [Tile.white]: number;
+};
+
+export const tileNot = {
+    [Tile.empty]: Tile.empty,
+    [Tile.black]: Tile.white,
+    [Tile.white]: Tile.black,
+};
+
 export const tileArrayDigits = '.XO';
 
 export const tileArrayCodec: Codec<Tile[], string> = {
@@ -174,23 +220,66 @@ export const tileArrayCodec: Codec<Tile[], string> = {
 //
 //
 //
+// BOARD -------------------------------------------------------------
+//
+
+export class Board {
+    constructor(public manifold: Manifold, public tiles: Tile[]) {}
+
+    copy() {
+        return new Board(this.manifold, Array.from(this.tiles));
+    }
+
+    get(at: RC): Tile | null {
+        let x = this.manifold.canonicalize(at);
+        if (x === null) {
+            return null;
+        }
+        return this.tiles[x.c + this.manifold.sizeCols * x.r];
+    }
+
+    set(at: RC, t: Tile) {
+        let x = this.manifold.canonicalize(at);
+        if (x !== null) {
+            this.tiles[x.c + this.manifold.sizeCols * x.r] = t;
+        }
+    }
+}
+
+export type BoardEncoded = {
+    m: ManifoldID;
+    t: string;
+};
+
+export const boardCodec: Codec<Board, BoardEncoded> = {
+    encode: (b: Board): BoardEncoded => ({
+        m: b.manifold.id,
+        t: tileArrayCodec.encode(b.tiles),
+    }),
+    decode: (be: BoardEncoded): Board =>
+        new Board(new Manifold(be.m), tileArrayCodec.decode(be.t)),
+};
+
+//
+//
+//
 // MOVE --------------------------------------------------------------
 //
 
 export type Move = {
-    board: Tile[];
+    board: Board;
 };
 
 export type MoveEncoded = {
-    b: string;
+    b: BoardEncoded;
 };
 
 export const moveCodec: Codec<Move, MoveEncoded> = {
     encode: (m: Move): MoveEncoded => ({
-        b: tileArrayCodec.encode(m.board),
+        b: boardCodec.encode(m.board),
     }),
     decode: (me: MoveEncoded): Move => ({
-        board: tileArrayCodec.decode(me.b),
+        board: boardCodec.decode(me.b),
     }),
 };
 
@@ -201,7 +290,18 @@ export const moveCodec: Codec<Move, MoveEncoded> = {
 //
 
 export type TableAttrs = {
-    manifold?: ManifoldID;
+    manifold?: Manifold;
+};
+
+export type TableAttrsEncoded = {
+    m?: ManifoldID;
+};
+
+export const tableAttrsCodec: Codec<TableAttrs, TableAttrsEncoded> = {
+    encode: (t: TableAttrs): TableAttrsEncoded =>
+        Object.assign({}, t.manifold ? { m: t.manifold.id } : {}),
+    decode: (te: TableAttrsEncoded): TableAttrs =>
+        Object.assign({}, te.m ? { manifold: new Manifold(te.m) } : {}),
 };
 
 export type Table = {
@@ -210,18 +310,18 @@ export type Table = {
 };
 
 export type TableEncoded = {
-    a: TableAttrs;
+    a: TableAttrsEncoded;
     m: MoveEncoded[];
 };
 
 export const tableCodec: Codec<Table, TableEncoded> = {
     encode: (t: Table): TableEncoded => ({
-        a: t.attrs,
+        a: tableAttrsCodec.encode(t.attrs),
         m: t.moves.map(moveCodec.encode),
     }),
 
     decode: (te: TableEncoded): Table => ({
-        attrs: te.a,
+        attrs: tableAttrsCodec.decode(te.a),
         moves: te.m.map(moveCodec.decode),
     }),
 };
@@ -238,7 +338,7 @@ export type TableTransition =
     | { t: 'moves'; v: Move[] };
 
 export type TableTransitionEncoded =
-    | { t: 'r'; v: TableAttrs }
+    | { t: 'r'; v: TableAttrsEncoded }
     | { t: 't'; v: number }
     | { t: 'm'; v: MoveEncoded[] };
 
@@ -249,14 +349,14 @@ export const tableTransitionCodec: Codec<
 > = {
     encode: (tt: TableTransition): TableTransitionEncoded => {
         switch (tt.t) {
-            case 'reset': return { t: 'r', v: tt.v };
+            case 'reset': return { t: 'r', v: tableAttrsCodec.encode(tt.v) };
             case 'trunc': return { t: 't', v: tt.v };
             case 'moves': return { t: 'm', v: tt.v.map(moveCodec.encode) };
         }
     },
     decode: (tte: TableTransitionEncoded): TableTransition => {
         switch (tte.t) {
-            case 'r': return { t: 'reset', v: tte.v };
+            case 'r': return { t: 'reset', v: tableAttrsCodec.decode(tte.v) };
             case 't': return { t: 'trunc', v: tte.v };
             case 'm': return { t: 'moves', v: tte.v.map(moveCodec.decode) };
         }
@@ -312,7 +412,7 @@ export class StateMachine<S, T> {
 export type TableAction =
     | { t: 'reset'; v: TableAttrs }
     | { t: 'undo' }
-    | { t: 'play'; at: string };
+    | { t: 'play'; at: RC };
 
 export function tableActionToBatch(
     t: Table,
@@ -325,5 +425,110 @@ export function tableActionToBatch(
             return [{ t: 'trunc', v: t.moves.length - 1 }];
         case 'play':
             return []; // TODO: Consult the rules of the game
+    }
+}
+
+//
+//
+//
+// GAME RULES --------------------------------------------------------
+//
+
+export type Group = {
+    color: Tile;
+    coords: Set<RC>;
+    liberties: number;
+};
+
+export function group(manifold: Manifold, board: Board, at: RC): Group | null {
+    const who = board.get(at);
+
+    if (who === null || who === Tile.empty) {
+        return null;
+    }
+
+    const notWho = tileNot[who];
+    const res = { color: who, coords: new Set<RC>(), liberties: 0 };
+
+    function _group(at: RC) {
+        res.coords.add(at);
+        for (const adj of manifold.adj(at)) {
+            switch (board.get(adj)) {
+                case Tile.empty:
+                    res.liberties += 1;
+                    break;
+                case who:
+                    if (!res.coords.has(adj)) {
+                        _group(adj);
+                    }
+                    break;
+                case notWho:
+                    break;
+            }
+        }
+    }
+
+    _group(at);
+    return res;
+}
+
+const ILLEGAL = Symbol('Illegal move');
+
+export class IllegalMove {
+    [ILLEGAL]: boolean;
+    constructor(public move: RC, public reason: string) {
+        this[ILLEGAL] = true;
+    }
+}
+
+export function isIllegal(x: any): x is IllegalMove {
+    return x[ILLEGAL] !== undefined;
+}
+
+export class Game {
+    constructor(
+        public manifold: Manifold,
+        public board: Board,
+        public captures: Captures
+    ) {}
+
+    static new(manifold: Manifold, board: Board): Game {
+        return new Game(manifold, board, {
+            [Tile.empty]: 0,
+            [Tile.black]: 0,
+            [Tile.white]: 0,
+        });
+    }
+
+    play(at: RC, t: Tile): Game | IllegalMove {
+        const manifold = this.manifold;
+        const board = this.board.copy();
+        const captures = Object.assign({}, this.captures);
+
+        if (board.get(at) !== Tile.empty) {
+            return new IllegalMove(at, 'not empty');
+        }
+
+        board.set(at, t);
+
+        let suicide = group(manifold, board, at)?.liberties == 0;
+
+        for (const adj of manifold.adj(at)) {
+            const g = group(manifold, board, adj);
+            if (g === null) {
+                continue;
+            }
+            if (g.color !== t && g.liberties === 0) {
+                suicide = false;
+                captures[t] = (captures[t] || 0) + g.coords.size;
+                g.coords.forEach((at) => board.set(at, Tile.empty));
+            }
+        }
+
+        if (suicide) {
+            return new IllegalMove(at, 'suicidal');
+        }
+
+        return new Game(manifold, board, captures);
     }
 }
