@@ -197,7 +197,6 @@ export enum Tile {
 }
 
 export type Captures = {
-    [Tile.empty]: number;
     [Tile.black]: number;
     [Tile.white]: number;
 };
@@ -217,6 +216,20 @@ export const tileArrayCodec: Codec<Tile[], string> = {
         Array.from(encoded).map((c) => tileArrayDigits.indexOf(c)),
 };
 
+export const capturesCodec: Codec<Captures, string> = {
+    encode: (c: Captures): string => `${c[Tile.black]},${c[Tile.white]}`,
+    decode: (ce: string): Captures => {
+        const m = ce.match(/(\d+),(\d+)/);
+        if (m === null) {
+            throw new Error(`Invalid captures encoding: ${ce}`);
+        }
+        return {
+            [Tile.black]: Number.parseInt(m[1]),
+            [Tile.white]: Number.parseInt(m[2]),
+        };
+    },
+};
+
 //
 //
 //
@@ -226,8 +239,31 @@ export const tileArrayCodec: Codec<Tile[], string> = {
 export class Board {
     constructor(public manifold: Manifold, public tiles: Tile[]) {}
 
+    static new(m: Manifold) {
+        const tiles = [];
+        for (let i = m.sizeRows * m.sizeCols; i-- > 0; ) {
+            tiles.push(Tile.empty);
+        }
+        return new Board(m, tiles);
+    }
+
     copy() {
         return new Board(this.manifold, Array.from(this.tiles));
+    }
+
+    equals(other: Board): boolean {
+        if (
+            this.manifold.id !== other.manifold.id ||
+            this.tiles.length !== other.tiles.length
+        ) {
+            return false;
+        }
+        for (let i = 0; i < this.tiles.length; i++) {
+            if (this.tiles[i] !== other.tiles[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     get(at: RC): Tile | null {
@@ -267,18 +303,22 @@ export const boardCodec: Codec<Board, BoardEncoded> = {
 //
 
 export type Move = {
+    captures: Captures;
     board: Board;
 };
 
 export type MoveEncoded = {
+    c: string;
     b: BoardEncoded;
 };
 
 export const moveCodec: Codec<Move, MoveEncoded> = {
     encode: (m: Move): MoveEncoded => ({
+        c: capturesCodec.encode(m.captures),
         b: boardCodec.encode(m.board),
     }),
     decode: (me: MoveEncoded): Move => ({
+        captures: capturesCodec.decode(me.c),
         board: boardCodec.decode(me.b),
     }),
 };
@@ -290,18 +330,18 @@ export const moveCodec: Codec<Move, MoveEncoded> = {
 //
 
 export type TableAttrs = {
-    manifold?: Manifold;
+    manifold: Manifold;
 };
 
 export type TableAttrsEncoded = {
-    m?: ManifoldID;
+    m: ManifoldID;
 };
 
 export const tableAttrsCodec: Codec<TableAttrs, TableAttrsEncoded> = {
-    encode: (t: TableAttrs): TableAttrsEncoded =>
-        Object.assign({}, t.manifold ? { m: t.manifold.id } : {}),
-    decode: (te: TableAttrsEncoded): TableAttrs =>
-        Object.assign({}, te.m ? { manifold: new Manifold(te.m) } : {}),
+    encode: (t: TableAttrs): TableAttrsEncoded => ({ m: t.manifold.id }),
+    decode: (te: TableAttrsEncoded): TableAttrs => ({
+        manifold: new Manifold(te.m),
+    }),
 };
 
 export type Table = {
@@ -363,12 +403,28 @@ export const tableTransitionCodec: Codec<
     },
 };
 
-// prettier-ignore
-export function tableApply(s: Table, tt: TableTransition): Table {
+export function tableApply(s: Table | undefined, tt: TableTransition): Table {
     switch (tt.t) {
-        case 'reset': return { attrs: Object.assign({}, tt.v), moves: [] };
-        case 'trunc': return { ...s, moves: s.moves.slice(0, tt.v) };
-        case 'moves': return { ...s, moves: s.moves.concat(tt.v) };
+        case 'reset':
+            return {
+                attrs: Object.assign({}, tt.v),
+                moves: [
+                    {
+                        captures: { [Tile.black]: 0, [Tile.white]: 0 },
+                        board: Board.new(tt.v.manifold),
+                    },
+                ],
+            };
+
+        case 'trunc':
+            if (s === undefined)
+                throw new Error(`First TableTransition must be 'reset'`);
+            return { ...s, moves: s.moves.slice(0, tt.v) };
+
+        case 'moves':
+            if (s === undefined)
+                throw new Error(`First TableTransition must be 'reset'`);
+            return { ...s, moves: s.moves.concat(tt.v) };
     }
 }
 
@@ -378,27 +434,23 @@ export function tableApply(s: Table, tt: TableTransition): Table {
 // STATE MACHINE -----------------------------------------------------
 //
 
-export type Applier<S, T> = (state: S, transition: T) => S;
+export type Applier<S, T> = (state: S | undefined, transition: T) => S;
 
 export class StateMachine<S, T> {
-    _seqno: number;
-    _state: S;
-    _applier: Applier<S, T>;
-
-    constructor(seqno: number, state: S, applier: Applier<S, T>) {
-        this._seqno = seqno;
-        this._state = state;
-        this._applier = applier;
-    }
+    constructor(
+        public seqno: number,
+        public applier: Applier<S, T>,
+        public state: S | undefined
+    ) {}
 
     applyBatch(seqno: number, batch: T[]) {
-        if (seqno != this._seqno + 1) {
-            throw new Error(`expected seqno ${this._seqno + 1}, got ${seqno}`);
+        if (seqno != this.seqno + 1) {
+            throw new Error(`expected seqno ${this.seqno + 1}, got ${seqno}`);
         }
 
-        this._seqno += 1;
+        this.seqno += 1;
         for (const tr of batch) {
-            this._state = this._applier(this._state, tr);
+            this.state = this.applier(this.state, tr);
         }
     }
 }
@@ -415,16 +467,39 @@ export type TableAction =
     | { t: 'play'; at: RC };
 
 export function tableActionToBatch(
-    t: Table,
+    t: Table | undefined,
     a: TableAction
 ): TableTransition[] {
     switch (a.t) {
         case 'reset':
             return [{ t: 'reset', v: a.v }];
+
         case 'undo':
-            return [{ t: 'trunc', v: t.moves.length - 1 }];
+            if (t === undefined) {
+                throw new Error(`First table action must be 'reset'`);
+            }
+            if (t.moves.length > 1) {
+                return [{ t: 'trunc', v: t.moves.length - 1 }];
+            } else {
+                return [];
+            }
+
         case 'play':
-            return []; // TODO: Consult the rules of the game
+            if (t === undefined) {
+                throw new Error(`First table action must be 'reset'`);
+            }
+            const toMove = t.moves.length % 2 == 1 ? Tile.black : Tile.white;
+            const move = play(t, a.at, toMove);
+            if (isIllegal(move)) {
+                return [];
+            } else {
+                return [
+                    {
+                        t: 'moves',
+                        v: [move],
+                    },
+                ];
+            }
     }
 }
 
@@ -448,17 +523,19 @@ export function group(manifold: Manifold, board: Board, at: RC): Group | null {
     }
 
     const notWho = tileNot[who];
+    const visited = Board.new(manifold);
     const res = { color: who, coords: new Set<RC>(), liberties: 0 };
 
     function _group(at: RC) {
         res.coords.add(at);
+        visited.set(at, Tile.black);
         for (const adj of manifold.adj(at)) {
             switch (board.get(adj)) {
                 case Tile.empty:
                     res.liberties += 1;
                     break;
                 case who:
-                    if (!res.coords.has(adj)) {
+                    if (visited.get(adj) === Tile.empty) {
                         _group(adj);
                     }
                     break;
@@ -485,50 +562,45 @@ export function isIllegal(x: any): x is IllegalMove {
     return x[ILLEGAL] !== undefined;
 }
 
-export class Game {
-    constructor(
-        public manifold: Manifold,
-        public board: Board,
-        public captures: Captures
-    ) {}
+export function play(tbl: Table, at: RC, t: Tile): Move | IllegalMove {
+    const manifold = tbl.attrs.manifold;
+    const lastMove = tbl.moves[tbl.moves.length - 1];
+    const captures = Object.assign({}, lastMove.captures);
+    const board = lastMove.board.copy();
 
-    static new(manifold: Manifold, board: Board): Game {
-        return new Game(manifold, board, {
-            [Tile.empty]: 0,
-            [Tile.black]: 0,
-            [Tile.white]: 0,
-        });
+    if (t === Tile.empty) {
+        return new IllegalMove(at, 'cannot play empty');
     }
 
-    play(at: RC, t: Tile): Game | IllegalMove {
-        const manifold = this.manifold;
-        const board = this.board.copy();
-        const captures = Object.assign({}, this.captures);
-
-        if (board.get(at) !== Tile.empty) {
-            return new IllegalMove(at, 'not empty');
-        }
-
-        board.set(at, t);
-
-        let suicide = group(manifold, board, at)?.liberties == 0;
-
-        for (const adj of manifold.adj(at)) {
-            const g = group(manifold, board, adj);
-            if (g === null) {
-                continue;
-            }
-            if (g.color !== t && g.liberties === 0) {
-                suicide = false;
-                captures[t] = (captures[t] || 0) + g.coords.size;
-                g.coords.forEach((at) => board.set(at, Tile.empty));
-            }
-        }
-
-        if (suicide) {
-            return new IllegalMove(at, 'suicidal');
-        }
-
-        return new Game(manifold, board, captures);
+    if (board.get(at) !== Tile.empty) {
+        return new IllegalMove(at, 'not empty');
     }
+
+    board.set(at, t);
+
+    let suicide = group(manifold, board, at)?.liberties == 0;
+
+    for (const adj of manifold.adj(at)) {
+        const g = group(manifold, board, adj);
+        if (g === null) {
+            continue;
+        }
+        if (g.color !== t && g.liberties === 0) {
+            suicide = false;
+            captures[t] = (captures[t] || 0) + g.coords.size;
+            g.coords.forEach((at) => board.set(at, Tile.empty));
+        }
+    }
+
+    if (suicide) {
+        return new IllegalMove(at, 'suicidal');
+    }
+
+    for (let i = 0; i < tbl.moves.length; i++) {
+        if (board.equals(tbl.moves[i].board)) {
+            return new IllegalMove(at, 'ko rule');
+        }
+    }
+
+    return { captures, board };
 }
