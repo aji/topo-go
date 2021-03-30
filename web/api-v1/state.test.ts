@@ -229,8 +229,6 @@ describe('tableActionToBatch', () => {
         ]);
     });
 
-    // TODO: test undo
-
     it('converts play correctly', () => {
         const manifold = normal9x9m;
         const board = S.Board.new(manifold);
@@ -253,6 +251,7 @@ describe('tableActionToBatch', () => {
 
 describe('play', () => {
     function example(
+        manifold: S.Manifold,
         name: string,
         spec: string,
         capturedBlack: number = 0,
@@ -269,7 +268,7 @@ describe('play', () => {
                 [S.Tile.black]: capturedBlack,
                 [S.Tile.white]: capturedWhite,
             },
-            board: S.Board.new(normal9x9m),
+            board: S.Board.new(manifold),
         };
 
         for (let r = 0; r < 9; r++) {
@@ -296,7 +295,7 @@ describe('play', () => {
             }
         }
 
-        it(name, () => {
+        it(`(${manifold.id}) ${name}`, () => {
             const tbl = new S.StateMachine(0, S.tableApply, undefined);
             const step = (a: S.TableAction) =>
                 tbl.applyBatch(
@@ -304,7 +303,7 @@ describe('play', () => {
                     S.tableActionToBatch(tbl.state, a)
                 );
 
-            step({ t: 'reset', v: { manifold: normal9x9m } });
+            step({ t: 'reset', v: { manifold } });
             for (let i = 0; i < moves.length; i++) {
                 if (!moves[i]) {
                     throw new Error(`${name}: missing move ${i + 1}`);
@@ -324,6 +323,7 @@ describe('play', () => {
     }
 
     example(
+        normal9x9m,
         'hello world',
         `.  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
          .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
@@ -337,6 +337,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'placing stones',
         `1  2  .  .  .  .  .  .  .     X  O  .  .  .  .  .  .  .
          .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
@@ -350,6 +351,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'single capture',
         `3  .  .  .  .  .  .  .  .     X  .  .  .  .  .  .  .  .
          5  .  .  .  .  .  .  .  .     X  .  .  .  .  .  .  .  .
@@ -365,6 +367,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'two capture',
         `5  .  .  .  .  .  .  .  .     X  .  .  .  .  .  .  .  .
          7  .  .  .  .  .  .  .  .     X  .  .  .  .  .  .  .  .
@@ -380,6 +383,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'edge capture one',
         `3  .  .  6  1  2  .  .  .     X  .  .  O  .  O  .  .  .
          5  .  .  .  4  .  .  .  .     X  .  .  .  O  .  .  .  .
@@ -395,6 +399,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'corner capture one',
         `1  2  .  3  .  .  .  .  .     .  O  .  X  .  .  .  .  .
          4  .  .  .  .  .  .  .  .     O  .  .  .  .  .  .  .  .
@@ -410,6 +415,7 @@ describe('play', () => {
     );
 
     example(
+        normal9x9m,
         'suicidal capture',
         `.  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
          .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
@@ -422,5 +428,69 @@ describe('play', () => {
          .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .`,
         1,
         0
+    );
+
+    example(
+        torus9x9m,
+        'safe across flat edges',
+        `.  .  .  .  6  1  4  .  .     .  .  .  .  O  X  O  .  .
+         .  .  .  .  .  2  .  .  .     .  .  .  .  .  O  .  .  .
+         .  5  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  7  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  9  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  11 .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
+         .  .  .  .  .  8  .  .  .     .  .  .  .  .  O  .  .  .
+         .  .  .  .  .  3  10 .  .     .  .  .  .  .  X  O  .  .`,
+        0,
+        0
+    );
+
+    example(
+        torus9x9m,
+        'capture across flat edges',
+        `.  .  .  .  6  1  4  .  .     .  .  .  .  O  .  O  .  .
+         .  .  .  .  .  2  .  .  .     .  .  .  .  .  O  .  .  .
+         .  5  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  7  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  9  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  11 .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
+         .  .  .  .  .  8  .  .  .     .  .  .  .  .  O  .  .  .
+         .  .  .  .  12 3  10 .  .     .  .  .  .  O  .  O  .  .`,
+        0,
+        2
+    );
+
+    example(
+        projective9x9m,
+        'safe across flip edges',
+        `.  .  .  .  6  1  4  .  .     .  .  .  .  O  X  O  .  .
+         .  .  .  .  .  2  .  .  .     .  .  .  .  .  O  .  .  .
+         .  5  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  7  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  9  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  11 .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
+         .  .  .  8  .  .  .  .  .     .  .  .  O  .  .  .  .  .
+         .  .  .  3  10 .  .  .  .     .  .  .  X  O  .  .  .  .`,
+        0,
+        0
+    );
+
+    example(
+        projective9x9m,
+        'capture across flip edges',
+        `.  .  .  .  6  1  4  .  .     .  .  .  .  O  .  O  .  .
+         .  .  .  .  .  2  .  .  .     .  .  .  .  .  O  .  .  .
+         .  5  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  7  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  9  .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  11 .  .  .  .  .  .  .     .  X  .  .  .  .  .  .  .
+         .  .  .  .  .  .  .  .  .     .  .  .  .  .  .  .  .  .
+         .  .  .  8  .  .  .  .  .     .  .  .  O  .  .  .  .  .
+         .  .  12 3  10 .  .  .  .     .  .  O  .  O  .  .  .  .`,
+        0,
+        2
     );
 });
