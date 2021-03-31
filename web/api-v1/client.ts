@@ -1,78 +1,87 @@
-import { Route } from './routes';
-import { ErrorBody } from './types';
+import * as S from './state';
+import * as http from './http';
+import { API } from './http';
+import { logJitter } from './util';
 
-type Fetch = typeof window.fetch;
+export type ConnEvent = { conn: Connection };
+export type ConnStartEvent = ConnEvent;
+export type ConnChangeEvent = ConnEvent & {
+    seqno: number;
+    table: S.Table | undefined;
+};
 
-export type Result<T> = { ok: true; body: T } | { ok: false; body: ErrorBody };
+export type ConnHooks = {
+    start: (e: ConnStartEvent) => void;
+    change: (e: ConnChangeEvent) => void;
+};
 
-export interface Client {
-    GET<T>(
-        r: Route<T, any, any, any, any>,
-        init?: RequestInit
-    ): Promise<Result<T>>;
-
-    POST<Req, Res>(
-        r: Route<any, Req, Res, any, any>,
-        body: Req,
-        init?: RequestInit
-    ): Promise<Result<Res>>;
-
-    DELETE<Req, Res>(
-        r: Route<any, any, any, Req, Res>,
-        body?: Req,
-        init?: RequestInit
-    ): Promise<Result<Res>>;
-}
-
-export default function (fetch: Fetch): Client {
-    function GET<T>(
-        r: Route<T, any, any, any, any>,
-        init: RequestInit = {}
-    ): Promise<Result<T>> {
-        return fetch(
-            r.path,
-            Object.assign({}, init, {
-                method: 'GET',
-                headers: { Accept: 'application/json' },
-            })
-        ).then((res) => res.json().then((body) => ({ ok: res.ok, body })));
+export class Connection {
+    constructor(
+        private call: http.ApiCaller,
+        private init: http.Table,
+        private hooks: ConnHooks,
+        private sm: S.StateMachine<S.Table, S.TableTransition>
+    ) {
+        this.hooks.start({ conn: this });
+        this.hooks.change({
+            conn: this,
+            seqno: this.sm.seqno,
+            table: this.sm.state,
+        });
+        this._fetchTransitions();
     }
 
-    function POST<Req, Res>(
-        r: Route<any, Req, Res, any, any>,
-        body: Req,
-        init: RequestInit = {}
-    ): Promise<Result<Res>> {
-        return fetch(
-            r.path,
-            Object.assign({}, init, {
-                method: 'POST',
-                headers: Object.assign(
-                    { Accept: 'application/json' },
-                    body ? { 'Content-Type': 'application/json' } : {}
-                ),
-                body: JSON.stringify(body),
-            })
-        ).then((res) => res.json().then((body) => ({ ok: res.ok, body })));
+    static resume(
+        call: http.ApiCaller,
+        init: http.Table,
+        hooks: Partial<ConnHooks>
+    ): Connection {
+        if (init.state === undefined || init.seqno === undefined) {
+            throw new Error('resume() init missing fields');
+        }
+
+        return new Connection(
+            call,
+            init,
+            {
+                start: hooks.start || (() => {}),
+                change: hooks.change || (() => {}),
+            },
+            new S.StateMachine(
+                init.seqno,
+                S.tableApply,
+                S.tableCodec.decode(init.state)
+            )
+        );
     }
 
-    function DELETE<Req, Res>(
-        r: Route<any, any, any, Req, Res>,
-        body?: Req,
-        init: RequestInit = {}
-    ): Promise<Result<Res>> {
-        return fetch(
-            r.path,
-            Object.assign({}, init, {
-                method: 'DELETE',
-                headers: Object.assign(
-                    { Accept: 'application/json' },
-                    body ? { 'Content-Type': 'application/json' } : {}
-                ),
-                body: JSON.stringify(body),
-            })
-        ).then((res) => res.json().then((body) => ({ ok: res.ok, body })));
+    _fetchTransitions() {
+        this.call(
+            API.table(this.init.id).transitions.get({ since: this.sm.seqno })
+        ).then((res) => {
+            if (res.ok) {
+                this._transitions(res.body);
+                this._fetchTransitions();
+            } else {
+                setTimeout(
+                    () => this._fetchTransitions(),
+                    logJitter(500, 2000)
+                );
+            }
+        });
     }
 
-    return { GET, POST, DELETE };
+    _transitions(res: http.Transitions) {
+        res.trs.forEach((batch, i) => {
+            this.sm.applyBatch(
+                res.seqno + i,
+                batch.map(S.tableTransitionCodec.decode)
+            );
+            this.hooks.change({
+                conn: this,
+                seqno: this.sm.seqno,
+                table: this.sm.state,
+            });
+        });
+    }
 }

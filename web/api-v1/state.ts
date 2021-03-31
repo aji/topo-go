@@ -109,6 +109,10 @@ export class Manifold {
         );
     }
 
+    static of(ty: ManifoldType, sz: ManifoldSize): Manifold {
+        return new Manifold(`${ty}/${sz}` as ManifoldID);
+    }
+
     // prettier-ignore
     canonicalize(at: RC): null | RC {
         let r = at.r;
@@ -466,6 +470,11 @@ export type TableAction =
     | { t: 'undo' }
     | { t: 'play'; at: RC };
 
+export type TableActionEncoded =
+    | { t: 'r'; v: TableAttrsEncoded }
+    | { t: 'u' }
+    | { t: 'p'; at: RC };
+
 export function tableActionToBatch(
     t: Table | undefined,
     a: TableAction
@@ -493,15 +502,28 @@ export function tableActionToBatch(
             if (isIllegal(move)) {
                 return [];
             } else {
-                return [
-                    {
-                        t: 'moves',
-                        v: [move],
-                    },
-                ];
+                return [{ t: 'moves', v: [move] }];
             }
     }
 }
+
+// prettier-ignore
+export const tableActionCodec = {
+    encode: (ta: TableAction): TableActionEncoded => {
+        switch (ta.t) {
+            case 'reset': return { t: 'r', v: tableAttrsCodec.encode(ta.v) };
+            case 'undo': return { t: 'u' };
+            case 'play': return { t: 'p', at: ta.at };
+        }
+    },
+    decode: (tte: TableActionEncoded): TableAction => {
+        switch (tte.t) {
+            case 'r': return { t: 'reset', v: tableAttrsCodec.decode(tte.v) };
+            case 'u': return { t: 'undo' };
+            case 'p': return { t: 'play', at: tte.at };
+        }
+    },
+};
 
 //
 //

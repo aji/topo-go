@@ -7,38 +7,90 @@ import {
     patch as patchIncrementalDom,
 } from 'incremental-dom';
 
-import { TableDetail } from '../api-v1/types';
-import createClient from '../api-v1/client';
+import * as S from '../api-v1/state';
+import * as http from '../api-v1/http';
+import { API, createClient } from '../api-v1/http';
+import * as C from '../api-v1/client';
 
 import './index.css';
 
-const { GET, POST, DELETE } = createClient(window.fetch);
-
 type Action =
-    | {
-          ty: 'startPlaying';
-          manifold: { ty: string; name: string; size: string };
-      }
-    | { ty: 'backToStart' };
-type State =
-    | { at: 'start' }
-    | { at: 'playing'; manifold: { ty: string; name: string; size: string } };
+    | { ty: 'stateStart'; e: C.ConnStartEvent }
+    | { ty: 'stateChange'; e: C.ConnChangeEvent }
+    | { ty: 'actionStart'; a: S.TableAction }
+    | { ty: 'actionError' };
+
+type State = {
+    call: http.ApiCaller;
+    tableInit: http.Table;
+    seqno?: number;
+    table?: S.Table;
+    lastTableAction?: S.TableAction;
+    speculative?: S.Table;
+};
+
 type Dispatch = (action: Action) => void;
 
-function initialState(): State {
-    return { at: 'playing', manifold: { ty: 'a', name: 'b', size: '9x9' } };
+function initialState(call: http.ApiCaller, init: http.Table): State {
+    return {
+        call,
+        tableInit: init,
+        seqno: init.seqno,
+        table: init.state && S.tableCodec.decode(init.state),
+    };
 }
 
 function reduce(state: State, action: Action): State {
     switch (action.ty) {
-        case 'startPlaying':
-            return { at: 'playing', manifold: action.manifold };
-        case 'backToStart':
-            return { at: 'start' };
+        case 'stateStart':
+            return { call: state.call, tableInit: state.tableInit };
+        case 'stateChange':
+            return {
+                ...state,
+                seqno: action.e.seqno,
+                table: action.e.table,
+                speculative: undefined,
+            };
+        case 'actionStart':
+            let spec = undefined;
+            if (state.table) {
+                spec = state.table;
+                for (const t of S.tableActionToBatch(spec, action.a)) {
+                    spec = S.tableApply(spec, t);
+                }
+            }
+            return {
+                ...state,
+                lastTableAction: action.a,
+                speculative: spec,
+            };
+        case 'actionError':
+            return { ...state, speculative: undefined };
         default:
             console.log('unknown action type');
             return state;
     }
+}
+
+function tableAction(state: State, dispatch: Dispatch, a: S.TableAction) {
+    if (state.speculative !== undefined) {
+        return;
+    }
+    dispatch({ ty: 'actionStart', a });
+    const req = API.table(state.tableInit.id).post(
+        S.tableActionCodec.encode(a)
+    );
+    state.call(req).then(
+        (res) => {
+            if (!res.ok) {
+                dispatch({ ty: 'actionError' });
+            }
+        },
+        (err) => {
+            console.log(err);
+            dispatch({ ty: 'actionError' });
+        }
+    );
 }
 
 type RF = () => void;
@@ -57,6 +109,7 @@ const E = (s: string, opts: { [key: string]: any } = {}) => (
 
 const $_ = E('div');
 const $b = E('b');
+const $p = E('p');
 const $tr = E('tr');
 const $td = E('td');
 
@@ -72,126 +125,51 @@ const tile = (r: number, c: number): RF => {
     })();
 };
 
-enum TileType {
-    empty,
-    black,
-    white,
-}
+const render = (state: State, dispatch: Dispatch): RF => {
+    const table = state.table;
 
-const tileOf = (type: TileType, r: number, c: number): RF => {
-    switch (type) {
-        case TileType.empty:
-            return tile(
-                r == 0 ? 0 : r == 8 ? 2 : 1,
-                c == 0 ? 0 : c == 8 ? 2 : 1
-            );
-        case TileType.black:
-            return tile(0, 3);
-        case TileType.white:
-            return tile(1, 3);
+    if (table === undefined) {
+        return $p(T('Loading...'));
     }
-};
 
-const boardInit = `
-. . . . . . . . .
-. . . . . . . . .
-. . . . . . . . .
-. . W B . . . . .
-. . B W . B . . .
-. . B W W B . . .
-. . . . B . . . .
-. . . . . . . . .
-. . . . . . . . .
-`;
+    const manifolds: [S.ManifoldType, string][] = [
+        ['normal', 'Normal'],
+        ['cylinder', 'Cylinder'],
+        ['mobius', 'Mobius strip'],
+        ['torus', 'Torus'],
+        ['klein', 'Klein bottle'],
+        ['projective', 'Projective plane'],
+    ];
+    const sizes: S.ManifoldSize[] = ['9x9', '13x13', '19x19'];
 
-const boardData: TileType[][] = (() => {
-    const res: TileType[][] = [];
-    const chars = boardInit
-        .split(/[\n ]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    console.log(chars.length);
-    console.log(chars.join(''));
-    for (let r = 0; r < 9; r++) {
-        res.push([]);
-        for (let c = 0; c < 9; c++) {
-            switch (chars.shift()) {
-                case '.':
-                    res[r].push(TileType.empty);
-                    break;
-                case 'B':
-                    res[r].push(TileType.black);
-                    break;
-                case 'W':
-                    res[r].push(TileType.white);
-                    break;
-            }
+    const choiceHandler = (manifold: S.Manifold, name: string) => (
+        e: Event
+    ) => {
+        if (confirm(`Start ${name} game?`)) {
+            tableAction(state, dispatch, {
+                t: 'reset',
+                v: { manifold },
+            });
         }
-    }
-    console.log(res);
-    return res;
-})();
+    };
 
-const board = (): RF => {
-    const idxs = Array.from(new Array(9).keys());
-    return E('table', { class: 'game-grid' })(
-        ...idxs.map((r) =>
-            $tr(...idxs.map((c) => $td(tileOf(boardData[r][c], r, c))))
-        )
+    const choicesRow = (manifold: S.ManifoldType, name: string): RF => {
+        return row(
+            $b(T(name)),
+            ...sizes.map((size) => {
+                const m = S.Manifold.of(manifold, size);
+                return button(choiceHandler(m, name))(T(size));
+            })
+        );
+    };
+
+    return $_(
+        T('Start a game at this table:'),
+        tabularize(...manifolds.map(([m, n]) => choicesRow(m, n)))
     );
 };
 
-const render = (state: State, dispatch: Dispatch): RF => {
-    switch (state.at) {
-        case 'start':
-            const manifolds = [
-                ['normal', 'Normal'],
-                ['cylinder', 'Cylinder'],
-                ['mobius', 'Mobius strip'],
-                ['torus', 'Torus'],
-                ['klein', 'Klein bottle'],
-                ['projective', 'Projective plane'],
-            ];
-            const sizes = ['9x9', '13x13', '19x19'];
-
-            const choiceHandler = (
-                manifold: string,
-                name: string,
-                size: string
-            ) => (e: Event) => {
-                if (confirm(`Start ${size} ${manifold} game?`)) {
-                    dispatch({
-                        ty: 'startPlaying',
-                        manifold: { ty: manifold, name, size },
-                    });
-                }
-            };
-
-            const choicesRow = (manifold: string, name: string): RF => {
-                return row(
-                    $b(T(name)),
-                    ...sizes.map((size) =>
-                        button(choiceHandler(manifold, name, size))(T(size))
-                    )
-                );
-            };
-
-            return $_(
-                T('Start a game at this table:'),
-                tabularize(...manifolds.map(([m, n]) => choicesRow(m, n)))
-            );
-
-        case 'playing':
-            return $_(
-                board(),
-                button((e) => dispatch({ ty: 'backToStart' }))(
-                    T('Back to start')
-                )
-            );
-    }
-};
-
-(window as any).startGame = (init: TableDetail, root: Element): void => {
+(window as any).startGame = (init: http.Table, root: Element): void => {
     const canvas = document.createElement('canvas');
     const page = document.createElement('div');
 
@@ -201,18 +179,26 @@ const render = (state: State, dispatch: Dispatch): RF => {
     root.appendChild(canvas);
     root.appendChild(page);
 
-    const s = { state: initialState(), pending: false };
+    const apiClient = createClient(window.fetch);
+    const s = { state: initialState(apiClient, init), pending: false };
+
     function update() {
         s.pending = false;
-        function dispatch(action: Action) {
-            s.state = reduce(s.state, action);
-            if (!s.pending) {
-                s.pending = true;
-                setTimeout(update, 0);
-            }
-        }
         patchIncrementalDom(page, render(s.state, dispatch));
     }
 
+    function dispatch(action: Action) {
+        s.state = reduce(s.state, action);
+        if (!s.pending) {
+            s.pending = true;
+            setTimeout(update, 0);
+        }
+    }
+
     update();
+
+    const conn = C.Connection.resume(apiClient, init, {
+        start: (e) => dispatch({ ty: 'stateStart', e }),
+        change: (e) => dispatch({ ty: 'stateChange', e }),
+    });
 };
